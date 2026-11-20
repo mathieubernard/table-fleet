@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Table Fleet" />
+    <meta name="theme-color" content="#151820" />
+    <title>Table Fleet · La bataille navale sur la table du salon</title>
+    <style>
+      :root { --p0: #6fa3cf; --p1: #e0806a; --gold: #ffc96b; --cream: #f4ecd8; --panel: rgba(20, 22, 30, .55); }
+      html, body { margin: 0; height: 100%; background: #151820; overflow: hidden; overscroll-behavior: none; touch-action: none; color: var(--cream);
+        -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+        font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+      #game { display: block; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; cursor: crosshair; touch-action: none; }
+      #screenProbe { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100lvh; visibility: hidden; pointer-events: none; }
+      #vignette { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100lvh; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 58%, rgba(10, 12, 20, 0.42) 100%); }
+      .hud { position: fixed; text-shadow: 0 1px 2px rgba(0,0,0,.6); transition: opacity .3s; }
+      body:not(.playing) #hud { opacity: 0; pointer-events: none; }
+      #hud { pointer-events: none; }
+
+      #title { top: max(18px, env(safe-area-inset-top)); left: max(22px, env(safe-area-inset-left)); }
+      #title h1 { margin: 0; font-size: 22px; letter-spacing: .04em; font-weight: 700; }
+      #title p { margin: 2px 0 0; font-size: 12px; opacity: .8; letter-spacing: .08em; text-transform: uppercase; }
+
+      #turn { top: max(18px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 8px 18px; border-radius: 999px; background: var(--panel);
+        backdrop-filter: blur(6px); font-weight: 700; font-size: 15px; white-space: nowrap; text-align: center; }
+      #turn small { display: block; font-weight: 500; font-size: 12px; opacity: .78; }
+      #turn.p0 { box-shadow: inset 0 0 0 2px var(--p0); }
+      #turn.p1 { box-shadow: inset 0 0 0 2px var(--p1); }
+
+      .fleet { top: 78px; width: 190px; padding: 10px 12px; border-radius: 12px; background: var(--panel); backdrop-filter: blur(6px); font-size: 12px; }
+      #fleetMine { left: 22px; }
+      #fleetEnemy { right: 22px; }
+      .fleet h2 { margin: 0 0 7px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; font-weight: 700; }
+      .fship { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; gap: 8px; transition: opacity .3s; }
+      .fship.sunk { opacity: .55; }
+      .fship.sunk span:first-child { text-decoration: line-through; }
+      .pips { display: flex; gap: 2px; flex: none; }
+      .pips i { width: 8px; height: 8px; background: #cfd8dc; box-shadow: inset -1px -1px 0 rgba(0,0,0,.28); }
+      .pips i.hit { background: #e0443a; }
+      .pips i.gone { background: #4a4c52; }
+
+      #score { top: max(18px, env(safe-area-inset-top)); right: max(22px, env(safe-area-inset-right)); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; opacity: .92; }
+
+      #coord { bottom: max(22px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); font-size: 14px; font-weight: 700; padding: 7px 16px; border-radius: 999px;
+        background: var(--panel); backdrop-filter: blur(6px); white-space: nowrap; }
+      #coord:empty { display: none; }
+      #coord b { color: var(--gold); }
+
+      /* ---- mise en place ---- */
+      #place { position: fixed; left: 22px; top: 78px; width: 230px; padding: 12px; border-radius: 12px; background: var(--panel); backdrop-filter: blur(6px);
+        display: none; font-size: 13px; }
+      body.placing #place { display: block; }
+      body.placing #fleetMine, body.placing #fleetEnemy, body.placing #score { display: none; }
+      #place h2 { margin: 0 0 8px; font-size: 14px; }
+      #placeList button { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 3px 0; }
+      #placeList button.active { background: var(--gold); color: #2a2118; text-shadow: none; }
+      #placeList button.done { opacity: .62; }
+      #placeList button.done::before { content: "✓ "; }
+      #place .row { display: flex; gap: 6px; margin-top: 8px; }
+      #place .row button { flex: 1; }
+      #place .help { margin: 8px 0 0; font-size: 11px; opacity: .78; line-height: 1.5; }
+      #btnDone { width: 100%; margin-top: 8px; padding: 10px; font-size: 14px; }
+
+      button { touch-action: manipulation; font: inherit; color: var(--cream); background: rgba(255,255,255,.12); border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer;
+        transition: transform .12s, background .15s; text-shadow: inherit; }
+      button:hover:not(:disabled) { background: rgba(255,255,255,.24); transform: translateY(-1px); }
+      button:active:not(:disabled) { transform: translateY(1px); }
+      button:disabled { opacity: .4; cursor: default; }
+      button.main { background: var(--gold); color: #2a2118; font-weight: 700; text-shadow: none; }
+      button.main:hover:not(:disabled) { background: #ffd98e; }
+
+      /* ---- bandeau de résultat ---- */
+      #banner { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; opacity: 0; white-space: nowrap; }
+      #banner.show { animation: bannerIn 1.9s cubic-bezier(.2,.9,.2,1.1) forwards; }
+      #banner b { display: block; font-size: clamp(42px, 8vw, 92px); font-weight: 800; letter-spacing: .02em; line-height: 1; -webkit-text-stroke: 6px rgba(20,16,12,.55); paint-order: stroke fill;
+        text-shadow: 0 5px 0 rgba(20,16,12,.55), 0 10px 26px rgba(0,0,0,.45); }
+      #banner span { display: block; margin-top: 8px; font-size: clamp(14px, 2vw, 21px); font-weight: 700; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+      #banner.miss b { color: #bfe6ee; }
+      #banner.hit b { color: #ff8a5a; }
+      #banner.sunk b { color: var(--gold); }
+      #banner.info b { color: var(--cream); font-size: clamp(26px, 4.4vw, 48px); -webkit-text-stroke: 4px rgba(20,16,12,.5); paint-order: stroke fill; }
+      @keyframes bannerIn { 0% { opacity: 0; transform: translateX(-50%) scale(.3) rotate(-4deg); } 16% { opacity: 1; transform: translateX(-50%) scale(1.14) rotate(1deg); }
+        26% { transform: translateX(-50%) scale(1) rotate(0); } 80% { opacity: 1; transform: translateX(-50%) scale(1); } 100% { opacity: 0; transform: translateX(-50%) scale(1.04) translateY(-14px); } }
+
+      #hintFast { position: fixed; bottom: 22px; right: 22px; font-size: 11px; opacity: 0; transition: opacity .25s; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+      body.busy #hintFast { opacity: .72; }
+
+      /* ---- écrans ---- */
+      .screen { position: fixed; inset: 0; display: none; place-items: center; text-align: center; padding: 20px; box-sizing: border-box; }
+      .screen.on { display: grid; }
+      .card { padding: 26px 34px; border-radius: 18px; background: rgba(20, 22, 30, .6); backdrop-filter: blur(8px); box-shadow: 0 14px 44px rgba(0,0,0,.35); max-width: 560px; }
+      #menu { place-items: center start; padding-left: 7vw; }
+      #menu .logo { margin: 0; font-size: clamp(48px, 8vw, 86px); font-weight: 800; letter-spacing: .03em; line-height: 1;
+        text-shadow: 0 5px 0 rgba(20,16,12,.5), 0 10px 28px rgba(0,0,0,.4); }
+      #menu .logo small { display: block; font-size: 14px; font-weight: 600; letter-spacing: .14em; line-height: 1.4; opacity: .85; margin-top: 8px; text-transform: uppercase; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+      #menu .btns { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; align-items: stretch; }
+      #menu .big { padding: 13px 22px; font-size: 17px; font-weight: 700; border-radius: 12px; }
+      #levels { display: flex; gap: 6px; }
+      #levels button { flex: 1; font-size: 13px; }
+      #levels button.active { background: var(--gold); color: #2a2118; text-shadow: none; font-weight: 700; }
+      #lang { position: absolute; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); font-size: 13px; font-weight: 700; letter-spacing: .06em; padding: 7px 11px; background: var(--panel); min-width: 44px; min-height: 36px; }
+      .small-note { margin: 12px 0 0; font-size: 11px; opacity: .7; }
+
+      #pass .card { background: rgba(14, 16, 24, .42); box-shadow: none; animation: passIn .5s cubic-bezier(.2,.9,.2,1.1); }
+      #pass h2 { margin: 0; font-size: clamp(26px, 5vw, 52px); font-weight: 800; line-height: 1.12; text-shadow: 0 4px 0 rgba(10,10,20,.5), 0 8px 26px rgba(0,0,0,.5); }
+      #pass h2 em { font-style: normal; }
+      #pass p { margin: 12px 0 18px; font-size: 15px; opacity: .9; }
+      #pass button { padding: 13px 26px; font-size: 17px; border-radius: 12px; }
+      #pass .eye { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; animation: blink 1.2s infinite; font-weight: 700; }
+      @keyframes blink { 50% { opacity: .35; } }
+      @keyframes passIn { from { opacity: 0; transform: scale(.7); } }
+
+      #end h2 { margin: 0; font-size: clamp(30px, 5vw, 54px); font-weight: 800; line-height: 1.1; }
+      #end p { font-size: 14px; opacity: .9; line-height: 1.6; }
+      #end .btns { display: flex; gap: 8px; justify-content: center; }
+      #end button { padding: 10px 18px; font-size: 15px; }
+      #end { pointer-events: none; place-items: end center; padding-bottom: 6vh; }
+      #end .card { pointer-events: auto; }
+
+      .navfocus { outline: 3px solid var(--gold); outline-offset: 3px; transform: scale(1.04); }
+      button.main.navfocus { outline-color: #fff6df; }
+      body[data-input="keys"] #game, body[data-input="pad"] #game { cursor: none !important; }
+      #controls { position: fixed; bottom: 62px; left: 22px; max-width: 46vw; font-size: 11px; line-height: 1.75; pointer-events: none; opacity: .92; text-shadow: 0 1px 2px rgba(0,0,0,.85); }
+      #controls b { color: var(--gold); }
+      #mute { position: fixed; bottom: 18px; left: 22px; font-size: 14px; padding: 5px 9px; background: var(--panel); }
+      /* ---- tactile ---- */
+      #btnRotate .rot { display: inline-block; width: 22px; height: 8px; margin-right: 8px; background: currentColor; border-radius: 2px; transition: transform .18s; vertical-align: middle; }
+      #btnRotate .rot.v { transform: rotate(90deg); }
+      #btnFire { display: none; position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); width: 104px; height: 104px; border-radius: 50%;
+        background: #d8423a; color: #fff6df; font-size: 22px; font-weight: 800; letter-spacing: .04em; box-shadow: 0 6px 0 #8f2620, 0 12px 26px rgba(0,0,0,.4); }
+      #btnFire:active:not(:disabled) { transform: translateY(5px); box-shadow: 0 1px 0 #8f2620; background: #d8423a; }
+      #btnFire:hover:not(:disabled) { background: #e2554c; }
+      #btnFire:disabled { opacity: .45; }
+      body[data-input="touch"].aiming #btnFire { display: block; }
+      body[data-input="touch"] #place button { min-height: 44px; }
+      body[data-input="touch"] #btnRotate { background: var(--gold); color: #2a2118; font-weight: 700; text-shadow: none; min-height: 56px; font-size: 15px; }
+      body[data-input="touch"] #levels button, body[data-input="touch"] #end button { min-height: 44px; }
+      body[data-input="touch"] #mute { min-width: 44px; min-height: 44px; }
+      body[data-input="touch"] #controls { bottom: max(22px, env(safe-area-inset-bottom)); left: max(76px, calc(env(safe-area-inset-left) + 60px)); }
+      #offlineNote { margin: 12px 0 0; font-size: 11px; opacity: .75; min-height: 14px; }
+
+      /* ---- tablette ou téléphone en portrait : les panneaux passent en bas ---- */
+      @media (orientation: portrait) {
+        #menu { place-items: center; padding-left: 20px; }
+        #title, #score, #controls { display: none; }
+        #place { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); left: 8px; right: 8px; width: auto; padding: 8px; box-sizing: border-box; }
+        #place h2, #place .help { display: none; }
+        #placeList { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+        #placeList button { font-size: 12px; margin: 0; }
+        body.placing #mute { display: none; }
+        body.placing #coord { bottom: calc(var(--place-h, 260px) + max(16px, env(safe-area-inset-bottom))); }
+        #mute { bottom: auto; top: max(14px, env(safe-area-inset-top)); left: 10px; }
+        .fleet { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); width: calc(50vw - 14px); box-sizing: border-box; padding: 8px; font-size: 11px; }
+        #fleetMine { left: 8px; }
+        #fleetEnemy { right: 8px; }
+        #coord { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 136px); }
+        #btnFire { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 136px); width: 92px; height: 92px; }
+        #hintFast { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 136px); }
+      }
+      /* ---- téléphone couché : peu de hauteur ---- */
+      @media (orientation: landscape) and (max-height: 560px) {
+        #title, #score, #controls { display: none; }
+        .fleet { display: none; }
+        #turn { padding: 4px 14px; font-size: 13px; }
+        #turn small { display: none; }
+        #place { top: 6px; bottom: 6px; left: max(6px, env(safe-area-inset-left)); width: 190px; padding: 6px; overflow-y: auto; box-sizing: border-box; }
+        #place h2, #place .help { display: none; }
+        #placeList button { font-size: 11px; margin: 2px 0; }
+        body[data-input="touch"] #place button { min-height: 34px; padding: 3px 8px; }
+        body[data-input="touch"] #btnRotate { min-height: 44px; }
+        body.placing #mute { display: none; }
+        .card { padding: 14px 22px; }
+        #menu .logo { font-size: 38px; }
+        #menu .btns { margin-top: 10px; gap: 6px; }
+        #menu .big { padding: 8px 16px; font-size: 14px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="screenProbe"></div>
+    <canvas id="game"></canvas>
+    <div id="vignette"></div>
+
+    <div id="hud">
+      <div class="hud" id="title"><h1>Table Fleet</h1><p data-i18n="game.subtitle">La bataille navale sur la table du salon</p></div>
+      <div class="hud" id="turn"></div>
+      <div class="hud" id="score"></div>
+      <div class="hud fleet" id="fleetMine"></div>
+      <div class="hud fleet" id="fleetEnemy"></div>
+      <div class="hud" id="coord"></div>
+    </div>
+
+    <div id="place">
+      <h2 id="placeTitle" data-i18n="place.title">Place ta flotte</h2>
+      <div id="placeList"></div>
+      <div class="row">
+        <button id="btnRotate" type="button">Pivoter (R)</button>
+        <button id="btnRandom" type="button" data-i18n="place.random">Au hasard</button>
+      </div>
+      <button id="btnDone" type="button" class="main" disabled data-i18n="place.done">Flotte prête</button>
+      <p class="help" id="placeHelp"></p>
+    </div>
+
+    <div id="banner"><b></b><span></span></div>
+    <button id="btnFire" type="button" disabled data-i18n="aim.fireButton">FEU</button>
+    <div id="hintFast">Clic : accélérer l'action</div>
+    <div id="controls"></div>
+    <button id="mute" type="button" aria-label="Couper le son" data-i18n-aria="mute" data-i18n-title="mute">🔊</button>
+
+    <div class="screen on" id="menu">
+      <button id="lang" type="button" data-i18n="lang.switch" data-i18n-aria="lang.switchLabel" data-i18n-title="lang.switchLabel">EN</button>
+      <div class="card">
+        <h1 class="logo">Table Fleet<small data-i18n="game.subtitle">La bataille navale sur la table du salon</small></h1>
+        <div class="btns">
+          <button class="big main" id="btnDuo" type="button" data-i18n="menu.duo">À deux sur cet appareil</button>
+          <button class="big" id="btnAi" type="button" data-i18n="menu.ai">Contre l'ordinateur</button>
+          <div id="levels">
+            <button type="button" data-level="easy" data-i18n="level.easy">Moussaillon</button>
+            <button type="button" data-level="normal" class="active" data-i18n="level.normal">Capitaine</button>
+            <button type="button" data-level="hard" data-i18n="level.hard">Amiral</button>
+          </div>
+        </div>
+        <p id="offlineNote"></p>
+      </div>
+    </div>
+
+    <div class="screen" id="pass">
+      <div class="card">
+        <div class="eye" data-i18n="pass.eye">Ne regarde pas l'écran de l'autre</div>
+        <h2 id="passTitle"></h2>
+        <p id="passSub"></p>
+        <button class="main" id="btnReady" type="button"></button>
+      </div>
+    </div>
+
+    <div class="screen" id="end">
+      <div class="card">
+        <h2 id="endTitle"></h2>
+        <p id="endSub"></p>
+        <div class="btns">
+          <button class="main" id="btnAgain" type="button" data-i18n="end.again">Nouvelle bataille</button>
+          <button id="btnMenu" type="button" data-i18n="end.menu">Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+    <script>
+      // Installable et jouable hors ligne (en production seulement : en développement, il garderait de vieux modules).
+      if ("serviceWorker" in navigator && location.protocol === "https:" && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
+    </script>
+  </body>
+</html>
